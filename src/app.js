@@ -41,7 +41,7 @@ app.post("/participants", async (req, res) => {
         await db.collection("participants").insertOne(newParticipant)
         await db.collection("messages").insertOne(newMessage)
 
-        let intervalo = setInterval(async () => {
+        /* let intervalo = setInterval(async () => {
             const array = await db.collection("participants").find({
                 lastStatus: { $gt: 10000 },
                 $where: function () { return (Date.now() - this.lastStatus) > 10000 }
@@ -68,15 +68,13 @@ app.post("/participants", async (req, res) => {
                         .updateOne({ from: array[j].name },
                             { $set: { text: "sai da sala..." } })
                     
-                    await db.collection("participants").deleteOne({name:array[j].name}) */
+                    await db.collection("participants").deleteOne({name:array[j].name}) 
                 }
+                await db.collection("messages").deleteOne({ from: messages[i].from })
             }
-        }, 15000)
-
-
+        }, 15000) */
 
         return res.status(201).send("Participante adicionado!")
-
 
     } catch (err) {
         return res.status(500).send(err.message)
@@ -100,24 +98,26 @@ app.post("/messages", async (req, res) => {
 
     const { to, text, type } = req.body
 
-    if (to === "" || text === "") {
+    console.log({ to, text, type })
+
+    /* if (to === "" || text === "") {
         return res.status(422).send("Campo obrigatório")
     }
 
     if (type !== "message" && type !== "private_message") {
         return res.sendStatus(422)
     }
-
+ */
     try {
-        const { from } = req.headers
+        const { user } = req.headers
 
-        console.log(from)
+        console.log("pegando o header", user)
 
-        const isParticipant = await db.collection("participants").findOne({ name: from })
+        const isParticipant = await db.collection("participants").findOne({ name: user })
         if (isParticipant === null) return res.status(422).send("Este usuário saiu")
 
         const time = dayjs().format("HH:mm:ss")
-        const newMessage = { from: from, to: to, text: text, type: type, time: time }
+        const newMessage = { from: user, to: to, text: text, type: type, time: time }
 
         await db.collection("messages").insertOne(newMessage)
 
@@ -176,8 +176,8 @@ app.post("/status", async (req, res) => {
     try {
         const resp = await db.collection("participants").findOne({ name: user })
         if (!resp) return res.sendStatus(404)
-        resp.lastStatus = Date.now()
-        console.log(resp)
+        await db.collection("participants")
+            .updateOne({ name: user }, { $set: { lastStatus: Date.now() } })
         res.sendStatus(200)
 
     } catch (err) {
@@ -186,15 +186,6 @@ app.post("/status", async (req, res) => {
 
 
 })
-
-function atualiza(array) {
-    const newArray = []
-    for (let i = 0; i < array.length; i++) {
-        if ((Date.now() - array[i].lastStatus) > 10000) {
-
-        }
-    }
-}
 
 
 app.listen(PORT, () => {
