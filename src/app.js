@@ -25,7 +25,6 @@ app.post("/participants", async (req, res) => {
 
     const { name } = req.body
 
-
     if (!name) {
         return res.status(422).send("Todos os campos são obrigatórios!")
     }
@@ -40,34 +39,75 @@ app.post("/participants", async (req, res) => {
         const newMessage = { from: name, to: "Todos", text: "entra na sala...", type: "status", time: time }
 
 
-         await db.collection("participants").insertOne(newParticipant)
-         await db.collection("messages").insertOne(newMessage)
-       
+        await db.collection("participants").insertOne(newParticipant)
+        await db.collection("messages").insertOne(newMessage)
+
 
         return res.status(201).send("Participante adicionado!")
 
     } catch (err) {
         return res.status(500).send(err.message)
     }
-
-
-
 })
 
+app.get("/participants", async (req, res) => {
 
-
-
-
-app.get("/participants", (req, res) => {
-
+    try {
+        const participants = await db.collection("participants").find().toArray()
+        res.send(participants)
+    } catch (err) {
+        console.log(err)
+        res.sendStatus(500)
+    }
+    
 })
 
-app.post("/messages", (req, res) => {
+app.post("/messages", async (req, res) => {
+
+
+    const {to, text, type} = req.body
+    
+    if(to === "" || text === ""){
+        return res.status(422).send("Campo obrigatório")
+    }
+
+    if(type !== "message" && type !== "private_message"){
+        console.log("to aqi")
+        return res.sendStatus(422)
+    }
+    
+    try{
+        const {from} = req.headers    
+
+        console.log(from)
+
+        const isParticipant = await db.collection("participants").findOne({name: from})
+        if(isParticipant === null) return res.status(422).send("Este usuário saiu")
+        
+        const time = dayjs().format("HH:mm:ss")
+        const newMessage = {from: from, to: to, text: text, type: type, time : time }
+
+        await db.collection("messages").insertOne(newMessage)
+
+        return res.sendStatus(201)
+
+    } catch (err) {
+        return res.status(500).send(err.message)
+    }
+    
+
+   
+    res.sendStatus(201)
+
 
 })
 
 app.get("/messages", (req, res) => {
 
+    const {from} = req.headers    
+
+   
+    res.sendStatus(201)
 })
 
 app.post("/status", (req, res) => {
