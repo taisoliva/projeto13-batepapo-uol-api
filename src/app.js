@@ -59,33 +59,33 @@ app.get("/participants", async (req, res) => {
         console.log(err)
         res.sendStatus(500)
     }
-    
+
 })
 
 app.post("/messages", async (req, res) => {
 
 
-    const {to, text, type} = req.body
-    
-    if(to === "" || text === ""){
+    const { to, text, type } = req.body
+
+    if (to === "" || text === "") {
         return res.status(422).send("Campo obrigatório")
     }
 
-    if(type !== "message" && type !== "private_message"){
+    if (type !== "message" && type !== "private_message") {
         console.log("to aqi")
         return res.sendStatus(422)
     }
-    
-    try{
-        const {from} = req.headers    
+
+    try {
+        const { from } = req.headers
 
         console.log(from)
 
-        const isParticipant = await db.collection("participants").findOne({name: from})
-        if(isParticipant === null) return res.status(422).send("Este usuário saiu")
-        
+        const isParticipant = await db.collection("participants").findOne({ name: from })
+        if (isParticipant === null) return res.status(422).send("Este usuário saiu")
+
         const time = dayjs().format("HH:mm:ss")
-        const newMessage = {from: from, to: to, text: text, type: type, time : time }
+        const newMessage = { from: from, to: to, text: text, type: type, time: time }
 
         await db.collection("messages").insertOne(newMessage)
 
@@ -94,20 +94,50 @@ app.post("/messages", async (req, res) => {
     } catch (err) {
         return res.status(500).send(err.message)
     }
-    
 
-   
+
+
     res.sendStatus(201)
 
 
 })
 
-app.get("/messages", (req, res) => {
+app.get("/messages", async (req, res) => {
 
-    const {from} = req.headers    
+    const limit = req.query.limit
+    const { user } = req.headers
+    const array = []
 
-   
-    res.sendStatus(201)
+    console.log(parseInt(limit) <= 0)
+
+    try {
+        const messages = await db.collection("messages").find().toArray()
+
+        const resp = await db.collection("messages").find({
+            $or: [
+                { to: "Todos" },
+                { to: user },
+                { from: user }]
+        }).toArray()
+
+        if (parseInt(limit) > 0) {
+            for (let i = 0; i < limit; i++) {
+                if (resp[i]) array.push(resp[i])
+            }
+
+            return res.send(array)
+
+        } else if (parseInt(limit) <= 0 || (isNaN(limit) && limit !== "")) {
+            console.log("entrei")
+            return res.sendStatus(422)
+
+        } else {
+            return res.send(resp)
+        }
+    } catch (err) {
+        return res.send(err.message)
+    }
+
 })
 
 app.post("/status", (req, res) => {
