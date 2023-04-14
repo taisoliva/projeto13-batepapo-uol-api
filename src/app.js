@@ -13,7 +13,6 @@ app.use(express.json())
 app.use(cors())
 dotenv.config()
 
-
 let db
 
 const mongoClient = new MongoClient(process.env.DATABASE_URL)
@@ -42,8 +41,42 @@ app.post("/participants", async (req, res) => {
         await db.collection("participants").insertOne(newParticipant)
         await db.collection("messages").insertOne(newMessage)
 
+        let intervalo = setInterval(async () => {
+            const array = await db.collection("participants").find({
+                lastStatus: { $gt: 10000 },
+                $where: function () { return (Date.now() - this.lastStatus) > 10000 }
+            }).toArray()
+
+            const messages = await db.collection("messages").find({ type: "status" }).toArray()
+
+            for (let i = 0; i < messages.length; i++) {
+                for (let j = 0; j < array.length; j++) {
+
+                    if (array[j].name === messages[i].from) {
+                        await db.collection("messages").insertOne({
+                            from: array[j].name,
+                            to: messages[i].to,
+                            text: "sai da sala...",
+                            type: messages[i].type,
+                            time: dayjs().format("HH:mm:ss")
+                        })
+                    }
+
+                    await db.collection("participants").deleteOne({ name: array[j].name })
+
+                    /* await db.collection("messages")
+                        .updateOne({ from: array[j].name },
+                            { $set: { text: "sai da sala..." } })
+                    
+                    await db.collection("participants").deleteOne({name:array[j].name}) */
+                }
+            }
+        }, 15000)
+
+
 
         return res.status(201).send("Participante adicionado!")
+
 
     } catch (err) {
         return res.status(500).send(err.message)
@@ -72,7 +105,6 @@ app.post("/messages", async (req, res) => {
     }
 
     if (type !== "message" && type !== "private_message") {
-        console.log("to aqi")
         return res.sendStatus(422)
     }
 
@@ -95,11 +127,6 @@ app.post("/messages", async (req, res) => {
         return res.status(500).send(err.message)
     }
 
-
-
-    res.sendStatus(201)
-
-
 })
 
 app.get("/messages", async (req, res) => {
@@ -108,12 +135,10 @@ app.get("/messages", async (req, res) => {
     const { user } = req.headers
     const array = []
 
-    console.log(parseInt(limit) <= 0)
-
     try {
         const messages = await db.collection("messages").find().toArray()
 
-        const resp = await db.collection("messages").find({
+        let resp = await db.collection("messages").find({
             $or: [
                 { to: "Todos" },
                 { to: user },
@@ -121,14 +146,15 @@ app.get("/messages", async (req, res) => {
         }).toArray()
 
         if (parseInt(limit) > 0) {
-            for (let i = 0; i < limit; i++) {
+            resp = resp.slice(-limit)
+
+            for (let i = 0; i < resp.length; i++) {
                 if (resp[i]) array.push(resp[i])
             }
 
             return res.send(array)
 
         } else if (parseInt(limit) <= 0 || (isNaN(limit) && limit !== "")) {
-            console.log("entrei")
             return res.sendStatus(422)
 
         } else {
@@ -140,9 +166,36 @@ app.get("/messages", async (req, res) => {
 
 })
 
-app.post("/status", (req, res) => {
+app.post("/status", async (req, res) => {
+
+    const { user } = req.headers
+
+
+    if (user === "") return res.sendStatus(404)
+
+    try {
+        const resp = await db.collection("participants").findOne({ name: user })
+        if (!resp) return res.sendStatus(404)
+        resp.lastStatus = Date.now()
+        console.log(resp)
+        res.sendStatus(200)
+
+    } catch (err) {
+        res.send(err.message)
+    }
+
 
 })
+
+function atualiza(array) {
+    const newArray = []
+    for (let i = 0; i < array.length; i++) {
+        if ((Date.now() - array[i].lastStatus) > 10000) {
+
+        }
+    }
+}
+
 
 app.listen(PORT, () => {
     console.log(`Server is running to ${PORT} port`)
