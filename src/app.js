@@ -3,6 +3,7 @@ import cors from "cors"
 import mongodb from 'mongodb';
 import dotenv from "dotenv"
 import dayjs from "dayjs"
+import joi from "joi"
 
 const app = express()
 const PORT = 5000;
@@ -24,8 +25,18 @@ app.post("/participants", async (req, res) => {
 
     const { name } = req.body
 
-    if (!name) {
-        return res.status(422).send("Todos os campos são obrigatórios!")
+    const newParticipant = { name: name, lastStatus: Date.now() }
+
+    const userSchema = joi.object({
+        name: joi.string().required(),
+        lastStatus: joi.number()
+    })
+
+    const validation = userSchema.validate(newParticipant)
+
+    if (validation.error) {
+        const erros = validation.error.details.map(detail => detail.message)
+        return res.status(422).send(erros)
     }
 
     try {
@@ -34,7 +45,6 @@ app.post("/participants", async (req, res) => {
 
 
         const time = dayjs().format("HH:mm:ss")
-        const newParticipant = { name: name, lastStatus: Date.now() }
         const newMessage = { from: name, to: "Todos", text: "entra na sala...", type: "status", time: time }
 
 
