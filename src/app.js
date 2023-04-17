@@ -16,9 +16,13 @@ dotenv.config()
 
 let db
 
+console.log(Date.now())
+
 const mongoClient = new MongoClient(process.env.DATABASE_URL)
 mongoClient.connect()
-    .then(() => db = mongoClient.db())
+    .then(() => {
+        db = mongoClient.db(); 
+        })
     .catch((err) => console.log(err.message))
 
 app.post("/participants", async (req, res) => {
@@ -51,39 +55,6 @@ app.post("/participants", async (req, res) => {
         await db.collection("participants").insertOne(newParticipant)
         await db.collection("messages").insertOne(newMessage)
 
-        /* let intervalo = setInterval(async () => {
-            const array = await db.collection("participants").find({
-                lastStatus: { $gt: 10000 },
-                $where: function () { return (Date.now() - this.lastStatus) > 10000 }
-            }).toArray()
-
-            const messages = await db.collection("messages").find({ type: "status" }).toArray()
-
-            for (let i = 0; i < messages.length; i++) {
-                for (let j = 0; j < array.length; j++) {
-
-                    if (array[j].name === messages[i].from) {
-                        await db.collection("messages").insertOne({
-                            from: array[j].name,
-                            to: messages[i].to,
-                            text: "sai da sala...",
-                            type: messages[i].type,
-                            time: dayjs().format("HH:mm:ss")
-                        })
-                    }
-
-                    await db.collection("participants").deleteOne({ name: array[j].name })
-
-                    /* await db.collection("messages")
-                        .updateOne({ from: array[j].name },
-                            { $set: { text: "sai da sala..." } })
-                    
-                    await db.collection("participants").deleteOne({name:array[j].name}) 
-                }
-                await db.collection("messages").deleteOne({ from: messages[i].from })
-            }
-        }, 15000) */
-
         return res.status(201).send("Participante adicionado!")
 
     } catch (err) {
@@ -107,8 +78,23 @@ app.post("/messages", async (req, res) => {
 
 
     const { to, text, type } = req.body
+    const { user } = req.headers
+    const time = dayjs().format("HH:mm:ss")
+    const newMessage = { from: user, to: to, text: text, type: type, time: time }
 
-    console.log({ to, text, type })
+    const userSchema = joi.object({
+        to:joi.string(),
+        text: joi.string(), 
+        type: joi.string().valid('message', 'private_message'),
+        from: joi.string().required()
+    }).unknown(true)
+
+    const validation = userSchema.validate(newMessage)
+
+    if (validation.error) {
+        const erros = validation.error.details.map(detail => detail.message)
+        return res.status(422).send(erros)
+    }
 
     /* if (to === "" || text === "") {
         return res.status(422).send("Campo obrigatório")
@@ -121,14 +107,8 @@ app.post("/messages", async (req, res) => {
     try {
         const { user } = req.headers
 
-        console.log("pegando o header", user)
-
         const isParticipant = await db.collection("participants").findOne({ name: user })
         if (isParticipant === null) return res.status(422).send("Este usuário saiu")
-
-        const time = dayjs().format("HH:mm:ss")
-        const newMessage = { from: user, to: to, text: text, type: type, time: time }
-
         await db.collection("messages").insertOne(newMessage)
 
         return res.sendStatus(201)
@@ -196,6 +176,44 @@ app.post("/status", async (req, res) => {
 
 
 })
+
+async function remover (){
+
+    try{
+        const offline = await db.collection("participants").find({ 
+            lastStatus: { $lt: Date.now() - 10000}
+            /* $where: function () { return (Date.now() - this.lastStatus) > 10000 } */
+        }).toArray()
+
+        offline.forEach( async ({name}) => {
+            const msg = {
+                from: name,
+                to: "Todos",
+                text: "sai da sala...",
+                type: "status",
+                time: dayjs().format("HH:mm:ss")
+            }
+            try{
+                await db.collection("participants").deleteOne({name}) 
+                await db.collection("messages").insertOne(msg)
+            } catch (err) {
+                console.log(err.message)
+            }
+        })
+
+
+    } catch (error){
+        res.send(error)
+    }
+}
+
+function verifica (){
+    setInterval(()=> {
+        remover()
+    }, 15000)
+}
+
+verifica()
 
 
 app.listen(PORT, () => {
